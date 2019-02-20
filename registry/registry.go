@@ -14,11 +14,14 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cozy/cozy-apps-registry/auth"
+	"github.com/cozy/cozy-apps-registry/config"
+	"github.com/cozy/cozy-apps-registry/consts"
 	"github.com/cozy/cozy-apps-registry/errshttp"
 	"github.com/cozy/cozy-apps-registry/lru"
 	"github.com/cozy/cozy-apps-registry/magic"
@@ -330,7 +333,7 @@ func RegisterSpace(name string) error {
 		spaces = make(map[string]*Space)
 	}
 	name = strings.TrimSpace(name)
-	if name == "__default__" {
+	if name == consts.DefaultSpacePrefix {
 		name = ""
 	} else {
 		if !validSpaceReg.MatchString(name) {
@@ -533,6 +536,9 @@ func createVersion(c *Space, db *kivik.DB, ver *Version, attachments []*kivik.At
 		return ErrVersionSlugMismatch
 	}
 
+	conf, err := config.NewConfig()
+	sc := conf.SwiftConnection
+
 	if ensureVersion {
 		_, err := FindVersion(c, ver.Slug, ver.Version)
 		if err == nil {
@@ -561,11 +567,25 @@ func createVersion(c *Space, db *kivik.DB, ver *Version, attachments []*kivik.At
 		}
 	}
 
+	// Storing the attachments to swift (screenshots, icon, partnership_icon)
+	basePath := filepath.Join(ver.Slug, ver.Version)
+
+	prefix := c.prefix
+	if prefix == "" {
+		prefix = consts.DefaultSpacePrefix
+	}
+
 	for _, att := range attachments {
-		ver.Rev, err = db.PutAttachment(ctx, ver.ID, ver.Rev, att)
+		f, err := sc.ObjectCreate(prefix, filepath.Join(basePath, att.Filename), false, "", att.ContentType, nil)
 		if err != nil {
 			return err
 		}
+		content, err := ioutil.ReadAll(att.Content)
+		if err != nil {
+			return err
+		}
+		f.Write(content)
+		defer f.Close()
 	}
 
 	return nil

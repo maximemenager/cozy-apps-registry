@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/cozy/cozy-apps-registry/auth"
+	"github.com/cozy/cozy-apps-registry/consts"
 	"github.com/cozy/cozy-apps-registry/registry"
 	"github.com/cozy/cozy-stack/pkg/utils"
-	"github.com/cozy/swift"
 	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -223,7 +223,7 @@ var rootCmd = &cobra.Command{
 var serveCmd = &cobra.Command{
 	Use:     "serve",
 	Short:   `Start the registry HTTP server`,
-	PreRunE: compose(loadSessionSecret, prepareRegistry, prepareSpaces, initSwiftConnection),
+	PreRunE: compose(loadSessionSecret, prepareRegistry, prepareSpaces),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		InitLogger(LoggerOptions{Syslog: viper.GetBool("syslog")})
 		address := fmt.Sprintf("%s:%d", viper.GetString("host"), viper.GetInt("port"))
@@ -940,7 +940,7 @@ func prepareSpaces(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return registry.RegisterSpace("__default__")
+	return registry.RegisterSpace(consts.DefaultSpacePrefix)
 }
 
 func loadSessionSecret(cmd *cobra.Command, args []string) error {
@@ -1116,37 +1116,4 @@ func envMap() map[string]string {
 		env[i[0:sep]] = i[sep+1:]
 	}
 	return env
-}
-
-func initSwiftConnection(cmd *cobra.Command, args []string) error {
-	endpointType := viper.GetString("swift.endpoint_type")
-
-	// Create the swift connection
-	c := swift.Connection{
-		UserName:     viper.GetString("swift.username"),
-		ApiKey:       viper.GetString("swift.api_key"), // Password
-		AuthUrl:      viper.GetString("swift.auth_url"),
-		EndpointType: swift.EndpointType(endpointType),
-		Tenant:       viper.GetString("swift.tenant"), // Projet name
-
-		Domain: viper.GetString("swift.domain"),
-	}
-	// Authenticate
-	err := c.Authenticate()
-	if err != nil {
-		panic(err)
-	}
-
-	// Prepare containers
-	spacesNames := viper.GetStringSlice("spaces")
-	for _, space := range spacesNames {
-		if _, _, err := c.Container(space); err != nil {
-			fmt.Printf("Creating container for space %s\n", space)
-			err = c.ContainerCreate(space, nil)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
