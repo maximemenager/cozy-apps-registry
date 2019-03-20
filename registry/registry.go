@@ -1109,10 +1109,7 @@ func HandleAssets(tarball *Tarball, opts *VersionOptions) ([]*kivik.Attachment, 
 func SaveTarball(space, filepath string, tarball *Tarball) error {
 	// Saving the tar to Swift
 	var content = bytes.NewReader(tarball.Content)
-	conf, err := config.GetConfig()
-	if err != nil {
-		return err
-	}
+	conf := config.GetConfig()
 	sc := conf.SwiftConnection
 
 	f, err := sc.ObjectCreate(space, filepath, false, "", tarball.ContentType, nil)
